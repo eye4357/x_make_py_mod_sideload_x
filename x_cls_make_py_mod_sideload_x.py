@@ -27,12 +27,12 @@ This module is implementation-light and deliberately permissive to make it
 useful for ad-hoc sideloading during development or packaging workflows.
 
 To get the module object:
-mod = loader.run(r"C:\path\to\site-packages", "x_make_yahw_x")
+mod = loader.run(r"C:\\path\\to\\site-packages", "x_make_yahw_x")
 then call attribute/class manually:
 inst = mod.x_cls_make_yahw_x() 
 print(inst.run()) # -> "Hello world!"
 To get an instantiated class directly:
-inst2 = loader.run(r"C:\path\to\site-packages", "x_make_yahw_x.x_cls_make_yahw_x", "x_cls_make_yahw_x") 
+inst2 = loader.run(r"C:\\path\\to\\site-packages", "x_make_yahw_x.x_cls_make_yahw_x", "x_cls_make_yahw_x") 
 print(inst2.run()) # -> "Hello world!"
 
 """
