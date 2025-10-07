@@ -7,15 +7,15 @@ under `base_path` and returns either the module or a requested attribute.
 The implementation is intentionally small to simplify static analysis.
 """
 
-from typing import Any, Optional
 import importlib.util
 import inspect
 import os
+from typing import Any
 
 
 class x_cls_make_py_mod_sideload_x:
     def run(
-        self, base_path: str, module: str, obj: Optional[str] = None
+        self, base_path: str, module: str, obj: str | None = None
     ) -> Any:
         """Load a module file under base_path and return module or attribute.
 
@@ -29,7 +29,7 @@ class x_cls_make_py_mod_sideload_x:
         if not os.path.isdir(base_path) and not os.path.isfile(base_path):
             raise FileNotFoundError(f"base_path does not exist: {base_path}")
 
-        module_file: Optional[str] = None
+        module_file: str | None = None
 
         # Absolute path to a file
         if os.path.isabs(module) and os.path.isfile(module):
