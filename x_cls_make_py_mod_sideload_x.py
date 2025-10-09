@@ -1,15 +1,11 @@
-"""Minimal sideload helper.
+"""Minimal sideload helper with typed sideload interface."""
 
-Provides a tiny helper class `x_cls_make_py_mod_sideload_x` with a single
-method `run(base_path, module, obj=None)` which loads a module from a file
-under `base_path` and returns either the module or a requested attribute.
-
-The implementation is intentionally small to simplify static analysis.
-"""
+from __future__ import annotations
 
 import importlib.util
 import inspect
 import os
+from importlib.util import spec_from_file_location
 from typing import Any
 
 
@@ -55,13 +51,13 @@ class x_cls_make_py_mod_sideload_x:
                     module_file = init
 
         if module_file is None:
-            raise ImportError(
-                f"Cannot resolve module file for module={module} under base_path={base_path}"
+            msg = (
+                "Cannot resolve module file for "
+                f"module={module} under base_path={base_path}"
             )
+            raise ImportError(msg)
 
-        spec = importlib.util.spec_from_file_location(
-            f"sideload_{abs(hash(module_file))}", module_file
-        )
+        spec = spec_from_file_location(f"sideload_{abs(hash(module_file))}", module_file)
         if spec is None or spec.loader is None:
             raise ImportError(f"Failed to create module spec for {module_file}")
 
