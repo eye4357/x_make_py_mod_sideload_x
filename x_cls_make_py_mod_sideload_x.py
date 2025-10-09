@@ -14,9 +14,7 @@ from typing import Any
 
 
 class x_cls_make_py_mod_sideload_x:
-    def run(
-        self, base_path: str, module: str, obj: str | None = None
-    ) -> Any:
+    def run(self, base_path: str, module: str, obj: str | None = None) -> Any:
         """Load a module file under base_path and return module or attribute.
 
         base_path: directory containing modules or packages
@@ -65,9 +63,7 @@ class x_cls_make_py_mod_sideload_x:
             f"sideload_{abs(hash(module_file))}", module_file
         )
         if spec is None or spec.loader is None:
-            raise ImportError(
-                f"Failed to create module spec for {module_file}"
-            )
+            raise ImportError(f"Failed to create module spec for {module_file}")
 
         module_obj = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module_obj)
