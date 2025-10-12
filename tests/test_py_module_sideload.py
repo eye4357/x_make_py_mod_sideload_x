@@ -5,7 +5,10 @@ from __future__ import annotations
 from contextlib import AbstractContextManager
 from typing import TYPE_CHECKING, cast
 
-from x_make_py_mod_sideload_x import PyModuleSideload, x_cls_make_py_mod_sideload_x
+from x_make_py_mod_sideload_x import (
+    PyModuleSideload,
+    x_cls_make_py_mod_sideload_x,
+)
 
 if TYPE_CHECKING:
     from pathlib import Path
