@@ -1,9 +1,9 @@
-# x_make_py_mod_sideload_x — Lab Notes from Walter White
+# x_make_py_mod_sideload_x — Control Room Lab Notes
 
 > "Sometimes you need to slide a module into place without rattling the rest of the system. This toolkit makes that move surgical."
 
 ## Manifesto
-x_make_py_mod_sideload_x handles Python module sideloading—resolving dynamic imports, staging packages from alternate paths, and validating that everything behaves before the orchestrator commits. It's the quiet workhorse behind the Road to 0.20.0 bootstrap story.
+x_make_py_mod_sideload_x handles Python module sideloading—resolving dynamic imports, staging packages from alternate paths, and validating that everything behaves before the orchestrator commits. It's the quiet workhorse behind the Road to 0.20.1 bootstrap story.
 
 ## Ingredients
 - Python 3.11+
@@ -28,8 +28,8 @@ x_make_py_mod_sideload_x handles Python module sideloading—resolving dynamic i
 
 ## Distribution Chain
 - [Changelog](./CHANGELOG.md)
-- [Road to 0.20.0 Control Room](../x_0_make_all_x/Change%20Control/0.20.0/index.md)
-- [Road to 0.20.0 Engineering Proposal](../x_0_make_all_x/Change%20Control/0.20.0/Road%20to%200.20.0%20Engineering%20Proposal%20-%20Walter%20White.md)
+- [Road to 0.20.1 Control Room Ledger](../x_0_make_all_x/Change%20Control/0.20.1/Road%20to%200.20.1%20Engineering%20Proposal.md)
+- [Road to 0.20.1 Engineering Proposal](../x_0_make_all_x/Change%20Control/0.20.1/Road%20to%200.20.1%20Engineering%20Proposal.md)
 
 ## Cross-Linked Intelligence
 - [x_make_common_x](../x_make_common_x/README.md) — provides subprocess, logging, and environment wrappers for sideload operations
