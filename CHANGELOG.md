@@ -2,6 +2,10 @@
 
 All notable changes to x_make_py_mod_sideload_x stay recorded here. We adhere to [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) standards and Semantic Versioning so every sneaky import stays accountable.
 
+## [0.20.2] - 2025-10-14
+### Changed
+- Refined documentation for the Road to 0.20.2 rollout, emphasizing the current sideload procedures and control-room expectations.
+
 ## [0.20.1] - 2025-10-13
 ### Changed
 - Realigned README links and narrative to the Road to 0.20.1 control-room ledger so every sideload cook follows the sanctioned playbook.
