@@ -3,10 +3,10 @@
 > "Sometimes you need to slide a module into place without rattling the rest of the system. This toolkit makes that move surgical."
 
 ## Manifesto
-x_make_py_mod_sideload_x handles Python module sideloading—resolving dynamic imports, staging packages from alternate paths, and validating that everything behaves before the orchestrator commits. It's the quiet workhorse behind the Road to 0.20.2 bootstrap story.
+x_make_py_mod_sideload_x handles Python module sideloading—resolving dynamic imports, staging packages from alternate paths, and validating that everything behaves before the orchestrator commits. It's the quiet workhorse behind the Road to 0.20.3 bootstrap story.
 
-## 0.20.2 Command Sequence
-Version 0.20.2 documents the sideload procedures I trust right now. Use this checklist to mirror the Road to 0.20.2 baseline and you won't blindside the orchestrator with untracked imports.
+## 0.20.3 Command Sequence
+Version 0.20.3 locks sideload manifests to the JSON board and ensures every injected module reports telemetry back through the refreshed visitor pipeline.
 
 ## Ingredients
 - Python 3.11+
@@ -31,8 +31,8 @@ Version 0.20.2 documents the sideload procedures I trust right now. Use this che
 
 ## Distribution Chain
 - [Changelog](./CHANGELOG.md)
-- [Road to 0.20.2 Control Room Ledger](../x_0_make_all_x/Change%20Control/0.20.2/Road%20to%200.20.2%20Engineering%20Proposal.md)
-- [Road to 0.20.2 Engineering Proposal](../x_0_make_all_x/Change%20Control/0.20.2/Road%20to%200.20.2%20Engineering%20Proposal.md)
+- [Road to 0.20.3 Control Room Ledger](../x_0_make_all_x/Change%20Control/0.20.3/Road%20to%200.20.3%20Engineering%20Proposal.md)
+- [Road to 0.20.3 Engineering Proposal](../x_0_make_all_x/Change%20Control/0.20.3/Road%20to%200.20.3%20Engineering%20Proposal.md)
 
 ## Cross-Linked Intelligence
 - [x_make_common_x](../x_make_common_x/README.md) — provides subprocess, logging, and environment wrappers for sideload operations
