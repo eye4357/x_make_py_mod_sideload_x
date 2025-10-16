@@ -2,6 +2,11 @@
 
 All notable changes to x_make_py_mod_sideload_x stay recorded here. We adhere to [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) standards and Semantic Versioning so every sneaky import stays accountable.
 
+## [0.20.4] - 2025-10-15
+### Changed
+- README and control notes updated for the Road to 0.20.4 campaign, highlighting how sideload manifests now feed the expanded Kanban evidence trail.
+- Reinforced guidance for tagging sideload runs with JSON artifacts so Static Gauntlet and Environment Provisioning columns inherit the data automatically.
+
 ## [0.20.3] - 2025-10-14
 ### Changed
 - Updated README and control notes to reflect the Road to 0.20.3 JSON ledger alignment for sideload manifests.
