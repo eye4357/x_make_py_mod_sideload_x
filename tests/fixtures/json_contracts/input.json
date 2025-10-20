@@ -1,0 +1,11 @@
+{
+  "command": "x_make_py_mod_sideload_x",
+  "parameters": {
+    "base_path": "C:/repos/x_demo",
+    "module": "demo.module",
+    "attribute": "run",
+    "loader_options": {
+      "force_reload": false
+    }
+  }
+}

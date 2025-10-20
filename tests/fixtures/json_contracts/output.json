@@ -1,0 +1,18 @@
+{
+  "status": "success",
+  "schema_version": "x_make_py_mod_sideload_x.run/1.0",
+  "module_file": "C:/repos/x_demo/demo/module.py",
+  "attribute": "run",
+  "object_kind": "attribute",
+  "messages": [
+    "Loaded demo.module",
+    "Resolved attribute run"
+  ],
+  "metadata": {
+    "module_name": "demo.module",
+    "loader_options": {
+      "force_reload": false
+    },
+    "attribute_type": "function"
+  }
+}

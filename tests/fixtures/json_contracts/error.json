@@ -1,0 +1,9 @@
+{
+  "status": "failure",
+  "message": "module resolution failed",
+  "details": {
+    "error": "module demo.missing not found",
+    "module": "demo.missing",
+    "base_path": "C:/repos/x_demo"
+  }
+}
