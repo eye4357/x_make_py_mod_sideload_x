@@ -8,10 +8,11 @@ import inspect
 import json
 import sys
 from collections.abc import Mapping, Sequence
+from contextlib import suppress
 from os import PathLike, fspath
 from pathlib import Path
-from types import ModuleType
-from typing import TYPE_CHECKING, Protocol, cast
+from types import MappingProxyType, ModuleType
+from typing import IO, TYPE_CHECKING, Protocol, cast
 
 from jsonschema import ValidationError
 
@@ -30,6 +31,10 @@ from x_make_py_mod_sideload_x.json_contracts import (
 StrPath = str | PathLike[str]
 
 SCHEMA_VERSION = "x_make_py_mod_sideload_x.run/1.0"
+
+ValidationErrorType = cast("type[Exception]", ValidationError)
+
+_EMPTY_MAPPING: Mapping[str, object] = MappingProxyType({})
 
 
 # Legacy-compatible entry point
@@ -94,7 +99,7 @@ def _load_module(base_path: StrPath, module: str) -> ModuleType:
 
 def _get_attribute(module_obj: ModuleType, attr_name: str) -> object:
     if not hasattr(module_obj, attr_name):
-        module_file_raw = cast("object | None", getattr(module_obj, "__file__", None))
+        module_file_raw = getattr(module_obj, "__file__", None)
         if isinstance(module_file_raw, str):
             module_file = module_file_raw
         elif module_file_raw is None:
@@ -107,7 +112,7 @@ def _get_attribute(module_obj: ModuleType, attr_name: str) -> object:
         )
         raise AttributeError(message)
 
-    attr = cast("object", getattr(module_obj, attr_name))
+    attr = getattr(module_obj, attr_name)
     if inspect.isclass(attr):
         attr_type = cast("type[object]", attr)
         return attr_type()
@@ -133,6 +138,12 @@ class PyModuleSideload:
 
     def __init__(self, module_loader: ModuleLoader | None = None) -> None:
         self._module_loader: ModuleLoader = module_loader or DefaultModuleLoader()
+
+    @property
+    def module_loader(self) -> ModuleLoader:
+        """Expose the module loader for advanced integrations and testing."""
+
+        return self._module_loader
 
     def run(
         self, base_path: StrPath, module: str, obj: str | None = None
@@ -162,10 +173,8 @@ def _failure_payload(
     payload: dict[str, object] = {"status": "failure", "message": message}
     if details:
         payload["details"] = dict(details)
-    try:
+    with suppress(ValidationErrorType):
         validate_payload(payload, ERROR_SCHEMA)
-    except ValidationError:
-        pass
     return payload
 
 
@@ -179,6 +188,23 @@ def _ensure_json_mapping(raw: object) -> dict[str, object]:
     if isinstance(raw, Mapping):
         return {str(key): value for key, value in raw.items()}
     return {}
+
+
+def _parameters_from_payload(payload: Mapping[str, object]) -> Mapping[str, object]:
+    parameters_obj = payload.get("parameters", {})
+    if isinstance(parameters_obj, Mapping):
+        return cast("Mapping[str, object]", parameters_obj)
+    return _EMPTY_MAPPING
+
+
+def _validate_required_inputs(
+    base_path: str | None, module_name: str | None
+) -> tuple[str, str] | None:
+    if not base_path:
+        return ("base_path", "base_path must be a non-empty string")
+    if not module_name:
+        return ("module", "module must be a non-empty string")
+    return None
 
 
 def main_json(
@@ -197,8 +223,7 @@ def main_json(
             },
         )
 
-    parameters_obj = payload.get("parameters", {})
-    parameters = cast("Mapping[str, object]", parameters_obj)
+    parameters = _parameters_from_payload(payload)
 
     base_path_obj = parameters.get("base_path")
     module_obj = parameters.get("module")
@@ -210,16 +235,13 @@ def main_json(
     attribute_name = _string_or_none(attribute_obj)
     loader_options = _ensure_json_mapping(loader_options_obj)
 
-    if not base_path:
-        return _failure_payload(
-            "base_path must be a non-empty string",
-            details={"field": "base_path"},
-        )
-    if not module_name:
-        return _failure_payload(
-            "module must be a non-empty string",
-            details={"field": "module"},
-        )
+    missing = _validate_required_inputs(base_path, module_name)
+    if missing is not None:
+        field, message = missing
+        return _failure_payload(message, details={"field": field})
+
+    assert base_path is not None  # mypy safeguard after validation
+    assert module_name is not None
 
     runner = ModuleSideloadRunner()
     messages: list[str] = []
@@ -228,7 +250,7 @@ def main_json(
         metadata["loader_options"] = loader_options
 
     try:
-        module_obj_loaded = runner._module_loader.load_module(base_path, module_name)  # type: ignore[attr-defined]
+        module_obj_loaded = runner.module_loader.load_module(base_path, module_name)
     except (FileNotFoundError, ImportError, ValueError, OSError) as exc:
         return _failure_payload(
             "module resolution failed",
@@ -239,9 +261,7 @@ def main_json(
             },
         )
 
-    module_file_obj = cast(
-        "object | None", getattr(module_obj_loaded, "__file__", None)
-    )
+    module_file_obj = getattr(module_obj_loaded, "__file__", None)
     module_file = module_file_obj if isinstance(module_file_obj, str) else None
     if module_file is None:
         module_file = _resolve_module_file(base_path, module_name)
@@ -252,7 +272,10 @@ def main_json(
     attribute_result: object | None = None
     if attribute_name:
         try:
-            attribute_result = runner._module_loader.get_attribute(module_obj_loaded, attribute_name)  # type: ignore[attr-defined]
+            attribute_result = runner.module_loader.get_attribute(
+                module_obj_loaded,
+                attribute_name,
+            )
         except AttributeError as exc:
             return _failure_payload(
                 "attribute resolution failed",
@@ -294,10 +317,16 @@ def main_json(
 
 
 def _load_json_payload(file_path: str | None) -> Mapping[str, object]:
+    def _load(stream: IO[str]) -> Mapping[str, object]:
+        payload_obj: object = json.load(stream)
+        if not isinstance(payload_obj, Mapping):
+            raise TypeError("JSON payload must be a mapping")
+        return cast("Mapping[str, object]", payload_obj)
+
     if file_path:
         with Path(file_path).open("r", encoding="utf-8") as handle:
-            return cast("Mapping[str, object]", json.load(handle))
-    return cast("Mapping[str, object]", json.load(sys.stdin))
+            return _load(handle)
+    return _load(sys.stdin)
 
 
 def _run_json_cli(args: Sequence[str]) -> None:

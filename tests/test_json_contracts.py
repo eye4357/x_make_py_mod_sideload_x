@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+# ruff: noqa: S101 - assertions express expectations in test cases
 import json
 import textwrap
 from pathlib import Path
