@@ -156,7 +156,9 @@ class ModuleSideloadRunner(PyModuleSideload):
         return super().run(base_path, module, obj)
 
 
-def _failure_payload(message: str, *, details: Mapping[str, object] | None = None) -> dict[str, object]:
+def _failure_payload(
+    message: str, *, details: Mapping[str, object] | None = None
+) -> dict[str, object]:
     payload: dict[str, object] = {"status": "failure", "message": message}
     if details:
         payload["details"] = dict(details)
@@ -179,7 +181,9 @@ def _ensure_json_mapping(raw: object) -> dict[str, object]:
     return {}
 
 
-def main_json(payload: Mapping[str, object], *, ctx: object | None = None) -> dict[str, object]:
+def main_json(
+    payload: Mapping[str, object], *, ctx: object | None = None
+) -> dict[str, object]:
     del ctx
     try:
         validate_payload(payload, INPUT_SCHEMA)
@@ -235,7 +239,9 @@ def main_json(payload: Mapping[str, object], *, ctx: object | None = None) -> di
             },
         )
 
-    module_file_obj = cast("object | None", getattr(module_obj_loaded, "__file__", None))
+    module_file_obj = cast(
+        "object | None", getattr(module_obj_loaded, "__file__", None)
+    )
     module_file = module_file_obj if isinstance(module_file_obj, str) else None
     if module_file is None:
         module_file = _resolve_module_file(base_path, module_name)
@@ -296,7 +302,9 @@ def _load_json_payload(file_path: str | None) -> Mapping[str, object]:
 
 def _run_json_cli(args: Sequence[str]) -> None:
     parser = argparse.ArgumentParser(description="x_make_py_mod_sideload_x JSON runner")
-    parser.add_argument("--json", action="store_true", help="Read JSON payload from stdin")
+    parser.add_argument(
+        "--json", action="store_true", help="Read JSON payload from stdin"
+    )
     parser.add_argument("--json-file", type=str, help="Path to JSON payload file")
     parsed = parser.parse_args(args)
 
