@@ -12,7 +12,7 @@ from contextlib import suppress
 from os import PathLike, fspath
 from pathlib import Path
 from types import MappingProxyType, ModuleType
-from typing import IO, TYPE_CHECKING, Protocol, cast
+from typing import IO, TYPE_CHECKING, NamedTuple, Protocol, cast
 
 from jsonschema import ValidationError
 
@@ -34,7 +34,19 @@ SCHEMA_VERSION = "x_make_py_mod_sideload_x.run/1.0"
 
 ValidationErrorType = cast("type[Exception]", ValidationError)
 
-_EMPTY_MAPPING: Mapping[str, object] = MappingProxyType({})
+_EMPTY_MAPPING: Mapping[str, object] = MappingProxyType(cast("dict[str, object]", {}))
+
+
+class _CoreInputs(NamedTuple):
+    base_path: str
+    module_name: str
+    attribute_name: str | None
+    loader_options: Mapping[str, object]
+
+
+class _LoadedModule(NamedTuple):
+    module: ModuleType
+    module_file: str
 
 
 # Legacy-compatible entry point
@@ -99,11 +111,13 @@ def _load_module(base_path: StrPath, module: str) -> ModuleType:
 
 def _get_attribute(module_obj: ModuleType, attr_name: str) -> object:
     if not hasattr(module_obj, attr_name):
-        module_file_raw = getattr(module_obj, "__file__", None)
+        module_file_raw: object | None = getattr(module_obj, "__file__", None)
         if isinstance(module_file_raw, str):
             module_file = module_file_raw
         elif module_file_raw is None:
             module_file = "<unknown>"
+        elif isinstance(module_file_raw, PathLike):
+            module_file = fspath(module_file_raw)
         else:
             module_file = str(module_file_raw)
         message = (
@@ -112,7 +126,7 @@ def _get_attribute(module_obj: ModuleType, attr_name: str) -> object:
         )
         raise AttributeError(message)
 
-    attr = getattr(module_obj, attr_name)
+    attr: object = getattr(module_obj, attr_name)
     if inspect.isclass(attr):
         attr_type = cast("type[object]", attr)
         return attr_type()
@@ -184,16 +198,19 @@ def _string_or_none(value: object) -> str | None:
     return None
 
 
-def _ensure_json_mapping(raw: object) -> dict[str, object]:
+def _ensure_json_mapping(raw: object) -> Mapping[str, object]:
     if isinstance(raw, Mapping):
-        return {str(key): value for key, value in raw.items()}
-    return {}
+        typed = cast("Mapping[str, object]", raw)
+        materialized = {str(key): value for key, value in typed.items()}
+        return MappingProxyType(materialized)
+    return _EMPTY_MAPPING
 
 
 def _parameters_from_payload(payload: Mapping[str, object]) -> Mapping[str, object]:
-    parameters_obj = payload.get("parameters", {})
+    parameters_obj = payload.get("parameters")
     if isinstance(parameters_obj, Mapping):
-        return cast("Mapping[str, object]", parameters_obj)
+        typed = cast("Mapping[str, object]", parameters_obj)
+        return MappingProxyType(dict(typed))
     return _EMPTY_MAPPING
 
 
@@ -207,10 +224,7 @@ def _validate_required_inputs(
     return None
 
 
-def main_json(
-    payload: Mapping[str, object], *, ctx: object | None = None
-) -> dict[str, object]:
-    del ctx
+def _validate_input_schema(payload: Mapping[str, object]) -> dict[str, object] | None:
     try:
         validate_payload(payload, INPUT_SCHEMA)
     except ValidationError as exc:
@@ -222,33 +236,36 @@ def main_json(
                 "schema_path": [str(part) for part in exc.schema_path],
             },
         )
+    return None
 
+
+def _extract_inputs(payload: Mapping[str, object]) -> _CoreInputs | dict[str, object]:
     parameters = _parameters_from_payload(payload)
-
-    base_path_obj = parameters.get("base_path")
-    module_obj = parameters.get("module")
-    attribute_obj = parameters.get("attribute")
-    loader_options_obj = parameters.get("loader_options")
-
-    base_path = _string_or_none(base_path_obj)
-    module_name = _string_or_none(module_obj)
-    attribute_name = _string_or_none(attribute_obj)
-    loader_options = _ensure_json_mapping(loader_options_obj)
+    base_path = _string_or_none(parameters.get("base_path"))
+    module_name = _string_or_none(parameters.get("module"))
+    attribute_name = _string_or_none(parameters.get("attribute"))
+    loader_options = _ensure_json_mapping(parameters.get("loader_options"))
 
     missing = _validate_required_inputs(base_path, module_name)
     if missing is not None:
         field, message = missing
         return _failure_payload(message, details={"field": field})
 
-    assert base_path is not None  # mypy safeguard after validation
-    assert module_name is not None
+    return _CoreInputs(base_path or "", module_name or "", attribute_name, loader_options)
 
-    runner = ModuleSideloadRunner()
-    messages: list[str] = []
-    metadata: dict[str, object] = {"module_name": module_name}
-    if loader_options:
-        metadata["loader_options"] = loader_options
 
+def _module_file_from_module(module_obj: ModuleType) -> str | None:
+    module_file_raw: object | None = getattr(module_obj, "__file__", None)
+    if isinstance(module_file_raw, str):
+        return module_file_raw
+    if isinstance(module_file_raw, PathLike):
+        return fspath(module_file_raw)
+    return None
+
+
+def _load_target_module(
+    runner: ModuleSideloadRunner, *, base_path: str, module_name: str
+) -> _LoadedModule | dict[str, object]:
     try:
         module_obj_loaded = runner.module_loader.load_module(base_path, module_name)
     except (FileNotFoundError, ImportError, ValueError, OSError) as exc:
@@ -261,35 +278,49 @@ def main_json(
             },
         )
 
-    module_file_obj = getattr(module_obj_loaded, "__file__", None)
-    module_file = module_file_obj if isinstance(module_file_obj, str) else None
+    module_file = _module_file_from_module(module_obj_loaded)
     if module_file is None:
         module_file = _resolve_module_file(base_path, module_name)
 
-    messages.append(f"Loaded {module_name}")
+    return _LoadedModule(module_obj_loaded, module_file)
 
-    object_kind = "module"
-    attribute_result: object | None = None
-    if attribute_name:
-        try:
-            attribute_result = runner.module_loader.get_attribute(
-                module_obj_loaded,
-                attribute_name,
-            )
-        except AttributeError as exc:
-            return _failure_payload(
-                "attribute resolution failed",
-                details={
-                    "error": str(exc),
-                    "attribute": attribute_name,
-                    "module_file": module_file,
-                },
-            )
-        messages.append(f"Resolved attribute {attribute_name}")
-        object_kind = "attribute"
-        metadata["attribute_type"] = type(attribute_result).__name__
 
-    result_payload: dict[str, object] = {
+def _resolve_attribute_if_requested(
+    runner: ModuleSideloadRunner,
+    module_obj: ModuleType,
+    attribute_name: str | None,
+    *,
+    module_file: str,
+    metadata: dict[str, object],
+    messages: list[str],
+) -> str | dict[str, object]:
+    if not attribute_name:
+        return "module"
+    try:
+        attribute_result = runner.module_loader.get_attribute(module_obj, attribute_name)
+    except AttributeError as exc:
+        return _failure_payload(
+            "attribute resolution failed",
+            details={
+                "error": str(exc),
+                "attribute": attribute_name,
+                "module_file": module_file,
+            },
+        )
+    metadata["attribute_type"] = type(attribute_result).__name__
+    messages.append(f"Resolved attribute {attribute_name}")
+    return "attribute"
+
+
+def _compose_success_payload(
+    *,
+    module_file: str,
+    attribute_name: str | None,
+    object_kind: str,
+    messages: Sequence[str],
+    metadata: Mapping[str, object],
+) -> dict[str, object]:
+    payload: dict[str, object] = {
         "status": "success",
         "schema_version": SCHEMA_VERSION,
         "module_file": module_file,
@@ -297,12 +328,15 @@ def main_json(
         "object_kind": object_kind,
     }
     if messages:
-        result_payload["messages"] = messages
+        payload["messages"] = list(messages)
     if metadata:
-        result_payload["metadata"] = metadata
+        payload["metadata"] = dict(metadata)
+    return payload
 
+
+def _validate_output_schema(result: Mapping[str, object]) -> dict[str, object] | None:
     try:
-        validate_payload(result_payload, OUTPUT_SCHEMA)
+        validate_payload(result, OUTPUT_SCHEMA)
     except ValidationError as exc:
         return _failure_payload(
             "generated output failed schema validation",
@@ -312,7 +346,57 @@ def main_json(
                 "schema_path": [str(part) for part in exc.schema_path],
             },
         )
+    return None
 
+
+def main_json(
+    payload: Mapping[str, object], *, ctx: object | None = None
+) -> dict[str, object]:
+    del ctx
+    schema_failure = _validate_input_schema(payload)
+    if schema_failure:
+        return schema_failure
+
+    inputs = _extract_inputs(payload)
+    if isinstance(inputs, dict):
+        return inputs
+
+    runner = ModuleSideloadRunner()
+    metadata: dict[str, object] = {"module_name": inputs.module_name}
+    if inputs.loader_options:
+        metadata["loader_options"] = dict(inputs.loader_options)
+
+    load_result = _load_target_module(
+        runner,
+        base_path=inputs.base_path,
+        module_name=inputs.module_name,
+    )
+    if isinstance(load_result, dict):
+        return load_result
+
+    messages = [f"Loaded {inputs.module_name}"]
+    object_kind = _resolve_attribute_if_requested(
+        runner,
+        load_result.module,
+        inputs.attribute_name,
+        module_file=load_result.module_file,
+        metadata=metadata,
+        messages=messages,
+    )
+    if isinstance(object_kind, dict):
+        return object_kind
+
+    result_payload = _compose_success_payload(
+        module_file=load_result.module_file,
+        attribute_name=inputs.attribute_name,
+        object_kind=object_kind,
+        messages=messages,
+        metadata=metadata,
+    )
+
+    output_failure = _validate_output_schema(result_payload)
+    if output_failure:
+        return output_failure
     return result_payload
 
 
@@ -320,8 +404,10 @@ def _load_json_payload(file_path: str | None) -> Mapping[str, object]:
     def _load(stream: IO[str]) -> Mapping[str, object]:
         payload_obj: object = json.load(stream)
         if not isinstance(payload_obj, Mapping):
-            raise TypeError("JSON payload must be a mapping")
-        return cast("Mapping[str, object]", payload_obj)
+            message = "JSON payload must be a mapping"
+            raise TypeError(message)
+        typed_payload = cast("Mapping[str, object]", payload_obj)
+        return MappingProxyType(dict(typed_payload))
 
     if file_path:
         with Path(file_path).open("r", encoding="utf-8") as handle:
