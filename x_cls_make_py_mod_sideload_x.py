@@ -3,18 +3,18 @@
 from __future__ import annotations
 
 import argparse
+import importlib
 import importlib.util
 import inspect
 import json
 import sys
 from collections.abc import Mapping, Sequence
 from contextlib import suppress
+from dataclasses import dataclass
 from os import PathLike, fspath
 from pathlib import Path
 from types import MappingProxyType, ModuleType
 from typing import IO, TYPE_CHECKING, NamedTuple, Protocol, cast
-
-from jsonschema import ValidationError
 
 if TYPE_CHECKING:
     from importlib.machinery import ModuleSpec
@@ -32,7 +32,20 @@ StrPath = str | PathLike[str]
 
 SCHEMA_VERSION = "x_make_py_mod_sideload_x.run/1.0"
 
-ValidationErrorType = cast("type[Exception]", ValidationError)
+
+class _ValidationErrorProtocol(Protocol):
+    message: str
+    path: tuple[object, ...]
+    schema_path: tuple[object, ...]
+
+
+def _load_validation_error() -> type[Exception]:
+    module = importlib.import_module("jsonschema")
+    error_type = module.ValidationError
+    return cast("type[Exception]", error_type)
+
+
+ValidationErrorType = _load_validation_error()
 
 _EMPTY_MAPPING: Mapping[str, object] = MappingProxyType(cast("dict[str, object]", {}))
 
@@ -47,6 +60,13 @@ class _CoreInputs(NamedTuple):
 class _LoadedModule(NamedTuple):
     module: ModuleType
     module_file: str
+
+
+@dataclass(slots=True)
+class _AttributeResolutionContext:
+    module_file: str
+    metadata: dict[str, object]
+    messages: list[str]
 
 
 # Legacy-compatible entry point
@@ -227,13 +247,14 @@ def _validate_required_inputs(
 def _validate_input_schema(payload: Mapping[str, object]) -> dict[str, object] | None:
     try:
         validate_payload(payload, INPUT_SCHEMA)
-    except ValidationError as exc:
+    except ValidationErrorType as exc:
+        error = cast("_ValidationErrorProtocol", exc)
         return _failure_payload(
             "input payload failed validation",
             details={
-                "error": exc.message,
-                "path": [str(part) for part in exc.path],
-                "schema_path": [str(part) for part in exc.schema_path],
+                "error": error.message,
+                "path": [str(part) for part in error.path],
+                "schema_path": [str(part) for part in error.schema_path],
             },
         )
     return None
@@ -251,7 +272,9 @@ def _extract_inputs(payload: Mapping[str, object]) -> _CoreInputs | dict[str, ob
         field, message = missing
         return _failure_payload(message, details={"field": field})
 
-    return _CoreInputs(base_path or "", module_name or "", attribute_name, loader_options)
+    return _CoreInputs(
+        base_path or "", module_name or "", attribute_name, loader_options
+    )
 
 
 def _module_file_from_module(module_obj: ModuleType) -> str | None:
@@ -290,25 +313,25 @@ def _resolve_attribute_if_requested(
     module_obj: ModuleType,
     attribute_name: str | None,
     *,
-    module_file: str,
-    metadata: dict[str, object],
-    messages: list[str],
+    context: _AttributeResolutionContext,
 ) -> str | dict[str, object]:
     if not attribute_name:
         return "module"
     try:
-        attribute_result = runner.module_loader.get_attribute(module_obj, attribute_name)
+        attribute_result = runner.module_loader.get_attribute(
+            module_obj, attribute_name
+        )
     except AttributeError as exc:
         return _failure_payload(
             "attribute resolution failed",
             details={
                 "error": str(exc),
                 "attribute": attribute_name,
-                "module_file": module_file,
+                "module_file": context.module_file,
             },
         )
-    metadata["attribute_type"] = type(attribute_result).__name__
-    messages.append(f"Resolved attribute {attribute_name}")
+    context.metadata["attribute_type"] = type(attribute_result).__name__
+    context.messages.append(f"Resolved attribute {attribute_name}")
     return "attribute"
 
 
@@ -337,13 +360,14 @@ def _compose_success_payload(
 def _validate_output_schema(result: Mapping[str, object]) -> dict[str, object] | None:
     try:
         validate_payload(result, OUTPUT_SCHEMA)
-    except ValidationError as exc:
+    except ValidationErrorType as exc:
+        error = cast("_ValidationErrorProtocol", exc)
         return _failure_payload(
             "generated output failed schema validation",
             details={
-                "error": exc.message,
-                "path": [str(part) for part in exc.path],
-                "schema_path": [str(part) for part in exc.schema_path],
+                "error": error.message,
+                "path": [str(part) for part in error.path],
+                "schema_path": [str(part) for part in error.schema_path],
             },
         )
     return None
@@ -375,13 +399,16 @@ def main_json(
         return load_result
 
     messages = [f"Loaded {inputs.module_name}"]
+    resolution_context = _AttributeResolutionContext(
+        module_file=load_result.module_file,
+        metadata=metadata,
+        messages=messages,
+    )
     object_kind = _resolve_attribute_if_requested(
         runner,
         load_result.module,
         inputs.attribute_name,
-        module_file=load_result.module_file,
-        metadata=metadata,
-        messages=messages,
+        context=resolution_context,
     )
     if isinstance(object_kind, dict):
         return object_kind
