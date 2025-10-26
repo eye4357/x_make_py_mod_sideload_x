@@ -11,7 +11,7 @@ import sys
 from collections.abc import Mapping, Sequence
 from contextlib import suppress
 from dataclasses import dataclass
-from os import PathLike, fspath
+from os import PathLike, fsdecode, fspath
 from pathlib import Path
 from types import MappingProxyType, ModuleType
 from typing import IO, TYPE_CHECKING, NamedTuple, Protocol, cast
@@ -39,15 +39,18 @@ class _ValidationErrorProtocol(Protocol):
     schema_path: tuple[object, ...]
 
 
+class _JsonSchemaModule(Protocol):
+    ValidationError: type[Exception]
+
+
 def _load_validation_error() -> type[Exception]:
-    module = importlib.import_module("jsonschema")
-    error_type = module.ValidationError
-    return cast("type[Exception]", error_type)
+    module = cast("_JsonSchemaModule", importlib.import_module("jsonschema"))
+    return module.ValidationError
 
 
 ValidationErrorType = _load_validation_error()
 
-_EMPTY_MAPPING: Mapping[str, object] = MappingProxyType(cast("dict[str, object]", {}))
+_EMPTY_MAPPING: Mapping[str, object] = MappingProxyType({})
 
 
 class _CoreInputs(NamedTuple):
@@ -137,7 +140,7 @@ def _get_attribute(module_obj: ModuleType, attr_name: str) -> object:
         elif module_file_raw is None:
             module_file = "<unknown>"
         elif isinstance(module_file_raw, PathLike):
-            module_file = fspath(module_file_raw)
+            module_file = fsdecode(module_file_raw)
         else:
             module_file = str(module_file_raw)
         message = (
@@ -282,7 +285,7 @@ def _module_file_from_module(module_obj: ModuleType) -> str | None:
     if isinstance(module_file_raw, str):
         return module_file_raw
     if isinstance(module_file_raw, PathLike):
-        return fspath(module_file_raw)
+        return fsdecode(module_file_raw)
     return None
 
 
@@ -429,12 +432,18 @@ def main_json(
 
 def _load_json_payload(file_path: str | None) -> Mapping[str, object]:
     def _load(stream: IO[str]) -> Mapping[str, object]:
-        payload_obj: object = json.load(stream)
-        if not isinstance(payload_obj, Mapping):
+        raw_payload = cast("object", json.load(stream))
+        if not isinstance(raw_payload, Mapping):
             message = "JSON payload must be a mapping"
             raise TypeError(message)
-        typed_payload = cast("Mapping[str, object]", payload_obj)
-        return MappingProxyType(dict(typed_payload))
+        payload_map = cast("Mapping[object, object]", raw_payload)
+        payload_dict: dict[str, object] = {}
+        for key, value in payload_map.items():
+            if not isinstance(key, str):
+                message = "JSON payload keys must be strings"
+                raise TypeError(message)
+            payload_dict[key] = value
+        return MappingProxyType(payload_dict)
 
     if file_path:
         with Path(file_path).open("r", encoding="utf-8") as handle:
@@ -450,10 +459,15 @@ def _run_json_cli(args: Sequence[str]) -> None:
     parser.add_argument("--json-file", type=str, help="Path to JSON payload file")
     parsed = parser.parse_args(args)
 
-    if not (parsed.json or parsed.json_file):
+    json_flag_obj: object = cast("object", getattr(parsed, "json", False))
+    read_from_stdin = bool(json_flag_obj)
+    json_file_obj: object = cast("object", getattr(parsed, "json_file", None))
+    json_file = json_file_obj if isinstance(json_file_obj, str) else None
+
+    if not (read_from_stdin or json_file):
         parser.error("JSON input required. Use --json for stdin or --json-file <path>.")
 
-    payload = _load_json_payload(parsed.json_file if parsed.json_file else None)
+    payload = _load_json_payload(None if read_from_stdin else json_file)
     result = main_json(payload)
     json.dump(result, sys.stdout, indent=2)
     sys.stdout.write("\n")

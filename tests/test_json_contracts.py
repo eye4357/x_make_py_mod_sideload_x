@@ -3,7 +3,7 @@ from __future__ import annotations
 # ruff: noqa: S101 - assertions express expectations in test cases
 import json
 import textwrap
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import TypeVar, cast
 
@@ -23,7 +23,14 @@ FIXTURE_DIR = Path(__file__).resolve().parent / "fixtures" / "json_contracts"
 
 
 def _round_trip(data: dict[str, object]) -> dict[str, object]:
-    return json.loads(json.dumps(data))
+    raw_obj = cast("object", json.loads(json.dumps(data)))
+    if not isinstance(raw_obj, Mapping):
+        message = "Round-trip payload must remain a mapping"
+        raise TypeError(message)
+    result: dict[str, object] = {}
+    for key, value in raw_obj.items():
+        result[str(key)] = value
+    return result
 
 
 def _module_fixture(func: FixtureFunc) -> FixtureFunc:
@@ -34,11 +41,14 @@ def _module_fixture(func: FixtureFunc) -> FixtureFunc:
 def _load_fixture(name: str) -> dict[str, object]:
     path = FIXTURE_DIR / f"{name}.json"
     with path.open("r", encoding="utf-8") as handle:
-        payload = json.load(handle)
-    if not isinstance(payload, dict):
+        raw_payload = cast("object", json.load(handle))
+    if not isinstance(raw_payload, Mapping):
         message = f"Fixture payload must be an object: {name}"
         raise TypeError(message)
-    return cast("dict[str, object]", payload)
+    payload_dict: dict[str, object] = {}
+    for key, value in raw_payload.items():
+        payload_dict[str(key)] = value
+    return payload_dict
 
 
 def _write_module(base_dir: Path, dotted_name: str, content: str) -> Path:
@@ -118,14 +128,24 @@ def test_main_json_runs_successfully(
     status_value = result.get("status")
     assert isinstance(status_value, str)
     assert status_value == "success"
-    assert result.get("object_kind") == "attribute"
-    assert result.get("attribute") == "run"
+    object_kind_value = result.get("object_kind")
+    attribute_value = result.get("attribute")
+    assert isinstance(object_kind_value, str)
+    assert isinstance(attribute_value, str)
+    assert object_kind_value == "attribute"
+    assert attribute_value == "run"
     module_file_value = result.get("module_file")
     assert isinstance(module_file_value, str)
     assert Path(module_file_value).resolve() == module_path.resolve()
-    metadata = result.get("metadata")
-    assert isinstance(metadata, dict)
-    assert metadata.get("attribute_type") == "function"
+    metadata_obj = result.get("metadata")
+    assert isinstance(metadata_obj, dict)
+    typed_metadata: dict[str, object] = {}
+    for key, value in metadata_obj.items():
+        assert isinstance(key, str)
+        typed_metadata[key] = cast("object", value)
+    attribute_type = typed_metadata.get("attribute_type")
+    assert isinstance(attribute_type, str)
+    assert attribute_type == "function"
 
 
 def test_main_json_reports_missing_attribute(
