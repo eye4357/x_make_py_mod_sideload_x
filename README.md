@@ -31,18 +31,8 @@ Use the CLI helpers to rehearse sideload scenarios and generate manifest logs be
 | Static contract scan | `python -m pyright` |
 | Functional verification | `pytest` |
 
-## System Linkage
-- [Changelog](./CHANGELOG.md)
-- [Road to 0.20.4 Engineering Proposal](../x_0_make_all_x/Change%20Control/0.20.4/Road%20to%200.20.4%20Engineering%20Proposal.md)
-- [Road to 0.20.3 Engineering Proposal](../x_0_make_all_x/Change%20Control/0.20.3/Road%20to%200.20.3%20Engineering%20Proposal.md)
-
 ## Reconstitution Drill
 Every monthly rebuild stages alternate modules on a clean machine, runs these scripts, and confirms the orchestrator and visitor consume the manifests without complaint. Runtime, Python version, and importlib hashes are logged; deviations trigger Change Control updates before the next deployment window.
-
-## Cross-Referenced Assets
-- [x_make_common_x](../x_make_common_x/README.md) — logging and subprocess scaffolding.
-- [x_make_github_visitor_x](../x_make_github_visitor_x/README.md) — validates sideloaded modules during compliance sweeps.
-- [x_0_make_all_x](../x_0_make_all_x/README.md) — orchestrator ensuring sideload steps align with release cadence.
 
 ## Conduct Code
 Document source, destination, safeguards, and rollback for every sideload in Change Control. Secret imports are sabotage. If it’s not in the ledger, it didn’t happen.
